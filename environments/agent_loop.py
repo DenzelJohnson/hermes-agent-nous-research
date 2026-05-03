@@ -269,7 +269,10 @@ class HermesAgentLoop:
                 not assistant_msg.tool_calls
                 and assistant_msg.content
                 and self.tool_schemas
-                and "<tool_call>" in (assistant_msg.content or "")
+                and (
+                    "<tool_call>" in (assistant_msg.content or "")
+                    or "TOOLCALL>" in (assistant_msg.content or "").upper()
+                )
             ):
                 try:
                     from environments.tool_call_parsers import get_parser

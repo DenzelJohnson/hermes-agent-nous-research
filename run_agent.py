@@ -3316,6 +3316,50 @@ class AIAgent:
         
         return None
 
+    def _recover_raw_tool_calls_from_content(self, assistant_message) -> bool:
+        """Best-effort recovery when a provider emits tool calls as plain text.
+
+        Some open-weight / router-backed models leak tool invocations into
+        assistant content instead of the structured ``tool_calls`` field. The
+        common cases are Hermes-style ``<tool_call>...</tool_call>`` XML and a
+        lighter ``TOOLCALL>[...]`` JSON prefix. When that happens we should
+        normalize the response back into structured tool calls and continue the
+        runtime loop instead of surfacing the raw invocation text as the final
+        answer.
+        """
+        if assistant_message is None or getattr(assistant_message, "tool_calls", None):
+            return False
+
+        content = getattr(assistant_message, "content", None)
+        if not isinstance(content, str) or not content.strip():
+            return False
+
+        if not (
+            "<tool_call>" in content
+            or re.search(r"(?i)\btoolcall>\s*", content)
+        ):
+            return False
+
+        try:
+            from environments.tool_call_parsers import get_parser
+
+            parser = get_parser("hermes")
+            parsed_content, parsed_calls = parser.parse(content)
+        except Exception as exc:
+            logger.debug("Raw tool-call recovery failed to initialize parser: %s", exc)
+            return False
+
+        if not parsed_calls:
+            return False
+
+        assistant_message.tool_calls = parsed_calls
+        assistant_message.content = parsed_content or ""
+        logger.info(
+            "Recovered %d raw tool call(s) from assistant content",
+            len(parsed_calls),
+        )
+        return True
+
     def _cleanup_task_resources(self, task_id: str) -> None:
         """Clean up VM and browser resources for a given task.
 
@@ -13022,6 +13066,8 @@ class AIAgent:
                     }
                 elif hasattr(self, "_codex_incomplete_retries"):
                     self._codex_incomplete_retries = 0
+
+                self._recover_raw_tool_calls_from_content(assistant_message)
                 
                 # Check for tool calls
                 if assistant_message.tool_calls:

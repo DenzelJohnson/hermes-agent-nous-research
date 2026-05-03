@@ -11,8 +11,9 @@ from pathlib import Path
 
 import pytest
 
-# Ensure repo root is importable
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+# Ensure repo root is importable without shadowing the real top-level
+# ``tools`` package with ``tests/tools`` during combined test runs.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 try:
     from environments.tool_call_parsers import (
@@ -109,6 +110,19 @@ class TestHermesParser:
     def test_empty_string(self, parser):
         content, tool_calls = parser.parse("")
         assert tool_calls is None
+
+    def test_toolcall_prefix_json_array(self, parser):
+        text = (
+            'Working on it.\n'
+            'TOOLCALL>[{"name":"browser_snapshot","arguments":{"question":"Read Results","full":true}}]'
+        )
+        content, tool_calls = parser.parse(text)
+        assert tool_calls is not None
+        assert len(tool_calls) == 1
+        assert tool_calls[0].function.name == "browser_snapshot"
+        assert "Working on it" in (content or "")
+        args = json.loads(tool_calls[0].function.arguments)
+        assert args == {"question": "Read Results", "full": True}
 
     def test_malformed_json_in_tool_call(self, parser):
         text = '<tool_call>not valid json</tool_call>'
