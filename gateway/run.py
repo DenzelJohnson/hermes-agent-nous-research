@@ -841,15 +841,24 @@ def _resolve_gateway_model(config: dict | None = None) -> str:
 
     Without this, temporary AIAgent instances (e.g. /compress) fall
     back to the hardcoded default which fails when the active provider is
-    openai-codex.
+    openai-codex. As a deployment/back-compat fallback, if config.yaml has no
+    main model, consult ``HERMES_INFERENCE_MODEL`` and then ``HERMES_MODEL``
+    so env-only Railway/Docker deployments don't send an empty model to the
+    provider.
     """
     cfg = config if config is not None else _load_gateway_config()
     model_cfg = cfg.get("model", {})
     if isinstance(model_cfg, str):
         return model_cfg
     elif isinstance(model_cfg, dict):
-        return model_cfg.get("default") or model_cfg.get("model") or ""
-    return ""
+        resolved = model_cfg.get("default") or model_cfg.get("model") or ""
+        if resolved:
+            return resolved
+    return (
+        os.getenv("HERMES_INFERENCE_MODEL", "").strip()
+        or os.getenv("HERMES_MODEL", "").strip()
+        or ""
+    )
 
 
 def _resolve_hermes_bin() -> Optional[list[str]]:

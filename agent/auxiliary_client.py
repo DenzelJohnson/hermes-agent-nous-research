@@ -1306,7 +1306,9 @@ def _read_main_model() -> str:
     """Read the user's configured main model from config.yaml.
 
     config.yaml model.default is the single source of truth for the active
-    model. Environment variables are no longer consulted.
+    model. As a deployment/back-compat fallback, if config has no main model,
+    consult ``HERMES_INFERENCE_MODEL`` and then ``HERMES_MODEL`` so
+    env-only deployments don't end up sending empty model names upstream.
     """
     try:
         from hermes_cli.config import load_config
@@ -1320,6 +1322,12 @@ def _read_main_model() -> str:
                 return default.strip()
     except Exception:
         pass
+    env_model = os.getenv("HERMES_INFERENCE_MODEL", "").strip()
+    if env_model:
+        return env_model
+    env_model = os.getenv("HERMES_MODEL", "").strip()
+    if env_model:
+        return env_model
     return ""
 
 

@@ -118,3 +118,19 @@ class TestResolveGatewayModel:
     def test_string_model_config(self):
         from gateway.run import _resolve_gateway_model
         assert _resolve_gateway_model({"model": "my-model"}) == "my-model"
+
+    def test_env_inference_model_fallback(self, monkeypatch):
+        from gateway.run import _resolve_gateway_model
+
+        monkeypatch.setenv("HERMES_INFERENCE_MODEL", "google/gemini-2.5-flash-preview")
+        monkeypatch.delenv("HERMES_MODEL", raising=False)
+
+        assert _resolve_gateway_model({"model": {}}) == "google/gemini-2.5-flash-preview"
+
+    def test_env_hermes_model_fallback(self, monkeypatch):
+        from gateway.run import _resolve_gateway_model
+
+        monkeypatch.delenv("HERMES_INFERENCE_MODEL", raising=False)
+        monkeypatch.setenv("HERMES_MODEL", "anthropic/claude-sonnet-4.6")
+
+        assert _resolve_gateway_model({}) == "anthropic/claude-sonnet-4.6"
